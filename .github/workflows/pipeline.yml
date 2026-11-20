@@ -57,7 +57,7 @@ jobs:
 
       # --- 3. Сохранение артефактов в Upstash Blob ---
       - name: Upload reports to Upstash Blob
-        shell: pwsh # <-- ИСПРАВЛЕНО: используем PowerShell для Windows
+        shell: powershell # <-- ИЗМЕНЕНО: используем стандартный Windows PowerShell
         env:
           UPSTASH_BLOB_TOKEN: ${{ secrets.UPSTASH_BLOB_TOKEN }}
         run: |
@@ -77,7 +77,7 @@ jobs:
           
           if (Test-Path -Path "./coverage" -PathType Container) {
             Write-Host "Uploading coverage reports to $bucket..."
-            # Обратите внимание на ` (обратный апостроф) для переноса строки в PowerShell
+            # Обратный апостроф ` работает для переноса строки и в PowerShell 5.1
             aws s3 cp ./coverage "s3://$bucket/reports/${{ github.sha }}/coverage" `
               --recursive `
               --endpoint-url $endpoint
@@ -87,19 +87,19 @@ jobs:
 
       # --- 4. Деплой в Kubernetes (GitOps) ---
       - name: Update Kubernetes manifest (GitOps)
-        shell: pwsh # <-- ИСПРАВЛЕНО: используем PowerShell вместо bash/sed
+        shell: powershell # <-- ИЗМЕНЕНО: используем стандартный Windows PowerShell
         env:
           GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
           IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
         run: |
-          # Отключаем интерактивные запросы git, чтобы процесс не зависал при ошибке
+          # Отключаем интерактивные запросы git
           $env:GIT_TERMINAL_PROMPT = 0
           
           # ЗАМЕНИТЕ 'your-username' на реальный логин владельца репозитория с манифестами
           git clone https://x-access-token:$env:GITOPS_TOKEN@github.com/your-username/my-app-manifests.git
           Set-Location my-app-manifests
           
-          # Аналог sed -i: читаем файл, делаем замену по регулярному выражению и сохраняем
+          # Читаем файл, делаем замену по регулярному выражению и сохраняем
           $content = Get-Content -Path deployment.yaml -Raw
           $content = $content -replace 'image:\s*.*', "image: $env:IMAGE"
           Set-Content -Path deployment.yaml -Value $content
