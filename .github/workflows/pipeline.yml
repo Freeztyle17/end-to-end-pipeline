@@ -57,17 +57,24 @@ jobs:
 
       # --- 3. Сохранение артефактов в Upstash Blob ---
       - name: Upload reports to Upstash Blob
-        shell: powershell # <-- ИЗМЕНЕНО: используем стандартный Windows PowerShell
+        shell: powershell
         env:
           UPSTASH_BLOB_TOKEN: ${{ secrets.UPSTASH_BLOB_TOKEN }}
         run: |
           npm install -g upstash
           
-          # Получаем JSON с учетными данными и преобразуем в объект PowerShell
-          $credsJson = upstash blob s3-credentials --token "$env:UPSTASH_BLOB_TOKEN" --format json | Out-String
+          # ИСПРАВЛЕНО: правильная команда 'credentials', а не 's3-credentials'
+          # Переменная UPSTASH_BLOB_TOKEN уже в env, поэтому upstash подхватит её автоматически
+          $credsJson = upstash blob credentials --format json | Out-String
+          
+          # Проверяем, что вернул JSON, а не ошибку
+          if ($credsJson -match "error|Error") {
+            Write-Error "Failed to get Upstash credentials: $credsJson"
+            exit 1
+          }
+          
           $creds = $credsJson | ConvertFrom-Json
           
-          # Устанавливаем переменные окружения для AWS CLI
           $env:AWS_ACCESS_KEY_ID = $creds.accessKeyId
           $env:AWS_SECRET_ACCESS_KEY = $creds.secretAccessKey
           $env:AWS_SESSION_TOKEN = $creds.sessionToken
@@ -75,14 +82,20 @@ jobs:
           $endpoint = $creds.endpoint
           $bucket = $creds.bucket
           
+          # Отладка: посмотрим, что вообще есть в директории после тестов
+          Write-Host "Checking for coverage directory..."
+          Get-ChildItem -Force | Select-Object Name, Length, LastWriteTime
+          
           if (Test-Path -Path "./coverage" -PathType Container) {
             Write-Host "Uploading coverage reports to $bucket..."
-            # Обратный апостроф ` работает для переноса строки и в PowerShell 5.1
             aws s3 cp ./coverage "s3://$bucket/reports/${{ github.sha }}/coverage" `
               --recursive `
               --endpoint-url $endpoint
           } else {
-            Write-Host "Directory ./coverage not found. Skipping upload."
+            Write-Host "Warning: Directory './coverage' not found. Skipping upload."
+            # Мы не делаем exit 1 здесь, чтобы пайплайн не падал из-за отсутствия coverage,
+            # если это не является критичным. Если критично — раскомментируйте строку ниже:
+            # exit 1
           }
 
       # --- 4. Деплой в Kubernetes (GitOps) ---
