@@ -61,41 +61,74 @@ jobs:
         env:
           UPSTASH_BLOB_TOKEN: ${{ secrets.UPSTASH_BLOB_TOKEN }}
         run: |
-          npm install -g upstash
-          
-          # ИСПРАВЛЕНО: правильная команда 'credentials', а не 's3-credentials'
-          # Переменная UPSTASH_BLOB_TOKEN уже в env, поэтому upstash подхватит её автоматически
-          $credsJson = upstash blob credentials --format json | Out-String
-          
-          # Проверяем, что вернул JSON, а не ошибку
-          if ($credsJson -match "error|Error") {
-            Write-Error "Failed to get Upstash credentials: $credsJson"
-            exit 1
-          }
-          
-          $creds = $credsJson | ConvertFrom-Json
-          
-          $env:AWS_ACCESS_KEY_ID = $creds.accessKeyId
-          $env:AWS_SECRET_ACCESS_KEY = $creds.secretAccessKey
-          $env:AWS_SESSION_TOKEN = $creds.sessionToken
-          $env:AWS_DEFAULT_REGION = if ($creds.region) { $creds.region } else { "auto" }
-          $endpoint = $creds.endpoint
-          $bucket = $creds.bucket
-          
-          # Отладка: посмотрим, что вообще есть в директории после тестов
-          Write-Host "Checking for coverage directory..."
-          Get-ChildItem -Force | Select-Object Name, Length, LastWriteTime
-          
+          # 1. Проверяем наличие папки coverage
           if (Test-Path -Path "./coverage" -PathType Container) {
-            Write-Host "Uploading coverage reports to $bucket..."
-            aws s3 cp ./coverage "s3://$bucket/reports/${{ github.sha }}/coverage" `
-              --recursive `
-              --endpoint-url $endpoint
+            Write-Host "Installing AWS SDK for JavaScript..."
+            npm install @aws-sdk/client-s3
+            
+            Write-Host "Fetching Upstash credentials..."
+            # upstash blob credentials выводит JSON по умолчанию, флаг --format не нужен
+            $credsJson = upstash blob credentials | Out-String
+            $creds = $credsJson | ConvertFrom-Json
+            
+            # 2. Создаем небольшой Node.js скрипт для рекурсивной загрузки директории
+            $uploadScript = @"
+            const fs = require('fs');
+            const path = require('path');
+            const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+            
+            const client = new S3Client({
+              endpoint: process.env.ENDPOINT,
+              region: process.env.AWS_DEFAULT_REGION || 'auto',
+              credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+                sessionToken: process.env.AWS_SESSION_TOKEN,
+              },
+              forcePathStyle: true // Обязательно для S3-совместимых хранилищ
+            });
+            
+            async function uploadDir(dir, prefix) {
+              const files = fs.readdirSync(dir);
+              for (const file of files) {
+                const filePath = path.join(dir, file);
+                const stat = fs.statSync(filePath);
+                // Заменяем обратные слеши Windows на прямые для корректных ключей в S3
+                const key = path.join(prefix, file).replace(/\\\\/g, '/'); 
+                
+                if (stat.isDirectory()) {
+                  await uploadDir(filePath, key);
+                } else {
+                  console.log('Uploading:', key);
+                  await client.send(new PutObjectCommand({
+                    Bucket: process.env.BUCKET,
+                    Key: key,
+                    Body: fs.readFileSync(filePath)
+                  }));
+                }
+              }
+            }
+
+uploadDir('./coverage', 'reports/${{ github.sha }}/coverage')
+  .then(() => console.log('Upload complete!'))
+  .catch(err => { console.error('Upload failed:', err); process.exit(1); });
+"@
+            Set-Content -Path "upload.js" -Value $uploadScript
+            
+            # 3. Передаем переменные окружения для Node.js скрипта
+            $env:ENDPOINT = $creds.endpoint
+            $env:BUCKET = $creds.bucket
+            $env:AWS_ACCESS_KEY_ID = $creds.accessKeyId
+            $env:AWS_SECRET_ACCESS_KEY = $creds.secretAccessKey
+            $env:AWS_SESSION_TOKEN = $creds.sessionToken
+            $env:AWS_DEFAULT_REGION = if ($creds.region) { $creds.region } else { "auto" }
+            
+            Write-Host "Starting upload to bucket: $env:BUCKET"
+            node upload.js
+            
           } else {
             Write-Host "Warning: Directory './coverage' not found. Skipping upload."
-            # Мы не делаем exit 1 здесь, чтобы пайплайн не падал из-за отсутствия coverage,
-            # если это не является критичным. Если критично — раскомментируйте строку ниже:
-            # exit 1
+            Write-Host "TIP: Убедитесь, что ваши тесты генерируют отчет. Попробуйте изменить шаг тестов на: 'npm test -- --coverage'"
           }
 
       # --- 4. Деплой в Kubernetes (GitOps) ---
