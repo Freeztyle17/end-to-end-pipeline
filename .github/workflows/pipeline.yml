@@ -14,7 +14,8 @@ jobs:
 
     steps:
       - name: Mark repo directory as safe
-        run: git config --global --add safe.directory 'C:/actions-runner/_work/end-to-end-pipeline/end-to-end-pipeline'
+        # Используем переменную github.workspace вместо жестко заданного пути
+        run: git config --global --add safe.directory '${{ github.workspace }}'
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -56,37 +57,57 @@ jobs:
 
       # --- 3. Сохранение артефактов в Upstash Blob ---
       - name: Upload reports to Upstash Blob
-        shell: bash
+        shell: pwsh # <-- ИСПРАВЛЕНО: используем PowerShell для Windows
         env:
           UPSTASH_BLOB_TOKEN: ${{ secrets.UPSTASH_BLOB_TOKEN }}
         run: |
           npm install -g upstash
-          CREDS=$(upstash blob s3-credentials --token "$UPSTASH_BLOB_TOKEN" --format json)
-          export AWS_ACCESS_KEY_ID=$(echo "$CREDS" | jq -r '.accessKeyId')
-          export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | jq -r '.secretAccessKey')
-          export AWS_SESSION_TOKEN=$(echo "$CREDS" | jq -r '.sessionToken')
-          export AWS_DEFAULT_REGION=$(echo "$CREDS" | jq -r '.region // "auto"')
-          ENDPOINT=$(echo "$CREDS" | jq -r '.endpoint')
-          BUCKET=$(echo "$CREDS" | jq -r '.bucket')
-          if [ -d "./coverage" ]; then
-            aws s3 cp ./coverage "s3://$BUCKET/reports/${{ github.sha }}/coverage" \
-              --recursive \
-              --endpoint-url "$ENDPOINT"
-          fi
+          
+          # Получаем JSON с учетными данными и преобразуем в объект PowerShell
+          $credsJson = upstash blob s3-credentials --token "$env:UPSTASH_BLOB_TOKEN" --format json | Out-String
+          $creds = $credsJson | ConvertFrom-Json
+          
+          # Устанавливаем переменные окружения для AWS CLI
+          $env:AWS_ACCESS_KEY_ID = $creds.accessKeyId
+          $env:AWS_SECRET_ACCESS_KEY = $creds.secretAccessKey
+          $env:AWS_SESSION_TOKEN = $creds.sessionToken
+          $env:AWS_DEFAULT_REGION = if ($creds.region) { $creds.region } else { "auto" }
+          $endpoint = $creds.endpoint
+          $bucket = $creds.bucket
+          
+          if (Test-Path -Path "./coverage" -PathType Container) {
+            Write-Host "Uploading coverage reports to $bucket..."
+            # Обратите внимание на ` (обратный апостроф) для переноса строки в PowerShell
+            aws s3 cp ./coverage "s3://$bucket/reports/${{ github.sha }}/coverage" `
+              --recursive `
+              --endpoint-url $endpoint
+          } else {
+            Write-Host "Directory ./coverage not found. Skipping upload."
+          }
 
       # --- 4. Деплой в Kubernetes (GitOps) ---
       - name: Update Kubernetes manifest (GitOps)
+        shell: pwsh # <-- ИСПРАВЛЕНО: используем PowerShell вместо bash/sed
         env:
-          GITOPS_TOKEN: ${{ secrets.GITOPS_PAT }}
+          GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
           IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
         run: |
-          git clone https://x-access-token:${{ secrets.GITOPS_TOKEN }}@github.com/your-username/my-app-manifests.git
-          cd my-app-manifests
-          sed -i "s|image: .*|image: $IMAGE|g" deployment.yaml
+          # Отключаем интерактивные запросы git, чтобы процесс не зависал при ошибке
+          $env:GIT_TERMINAL_PROMPT = 0
+          
+          # ЗАМЕНИТЕ 'your-username' на реальный логин владельца репозитория с манифестами
+          git clone https://x-access-token:$env:GITOPS_TOKEN@github.com/your-username/my-app-manifests.git
+          Set-Location my-app-manifests
+          
+          # Аналог sed -i: читаем файл, делаем замену по регулярному выражению и сохраняем
+          $content = Get-Content -Path deployment.yaml -Raw
+          $content = $content -replace 'image:\s*.*', "image: $env:IMAGE"
+          Set-Content -Path deployment.yaml -Value $content
+          
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add deployment.yaml
-          git commit -m "Update image to ${{ github.sha }}"
+          git commit -m "chore: update image to $env:IMAGE"
           git push
 
       # --- 5. Уведомление в Пачку (заменяет Mattermost) ---
