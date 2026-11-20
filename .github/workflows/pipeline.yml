@@ -109,12 +109,12 @@ jobs:
               }
             }
 
-uploadDir('./coverage', 'reports/${{ github.sha }}/coverage')
-  .then(() => console.log('Upload complete!'))
-  .catch(err => { console.error('Upload failed:', err); process.exit(1); });
-"@
-            Set-Content -Path "upload.js" -Value $uploadScript
-            
+            uploadDir('./coverage', 'reports/${{ github.sha }}/coverage')
+              .then(() => console.log('Upload complete!'))
+              .catch(err => { console.error('Upload failed:', err); process.exit(1); });
+            "@
+                        Set-Content -Path "upload.js" -Value $uploadScript
+                        
             # 3. Передаем переменные окружения для Node.js скрипта
             $env:ENDPOINT = $creds.endpoint
             $env:BUCKET = $creds.bucket
