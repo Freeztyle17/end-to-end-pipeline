@@ -13,6 +13,9 @@ jobs:
     runs-on: self-hosted
 
     steps:
+      - name: Mark repo directory as safe
+        run: git config --global --add safe.directory 'C:/actions-runner/_work/end-to-end-pipeline/end-to-end-pipeline'
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -81,11 +84,11 @@ jobs:
           git push
 
       # --- 5. Уведомление в Пачку (заменяет Mattermost) ---
-      - name: Notify Pachka on failure
-        if: failure()
-        uses: essentialkaos/pachca-action@v1
-        with:
-          webhook: ${{ secrets.PACHKA_WEBHOOK_URL }}
-          title: "❌ CI/CD Pipeline Failed"
-          message: "Пайплайн для коммита `${{ github.sha }}` провалился. Подробности: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          type: "ci-failure"
+      # - name: Notify Pachka on failure
+      #   if: failure()
+      #   uses: essentialkaos/pachca-action@v1
+      #   with:
+      #     webhook: ${{ secrets.PACHKA_WEBHOOK_URL }}
+      #     title: "❌ CI/CD Pipeline Failed"
+      #     message: "Пайплайн для коммита `${{ github.sha }}` провалился. Подробности: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      #     type: "ci-failure"
