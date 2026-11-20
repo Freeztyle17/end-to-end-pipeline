@@ -31,7 +31,7 @@ jobs:
         run: npm ci
 
       - name: Run unit tests
-        run: npm test
+        run: npm test -- --coverage
 
       # --- 2. Сборка и пуш Docker-образа в ghcr.io ---
       - name: Log in to GitHub Container Registry
