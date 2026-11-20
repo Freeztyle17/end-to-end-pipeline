@@ -81,11 +81,11 @@ jobs:
           git push
 
       # --- 5. Уведомление в Пачку (заменяет Mattermost) ---
-      - name: Notify Pachka on failure
-        if: failure()
-        uses: essentialkaos/pachca-action@v1
-        with:
-          webhook: ${{ secrets.PACHKA_WEBHOOK_URL }}
-          title: "❌ CI/CD Pipeline Failed"
-          message: "Пайплайн для коммита `${{ github.sha }}` провалился. Подробности: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          type: "ci-failure"
+      # - name: Notify Pachka on failure
+      #   if: failure()
+      #   uses: essentialkaos/pachca-action@v1
+      #   with:
+      #     webhook: ${{ secrets.PACHKA_WEBHOOK_URL }}
+      #     title: "❌ CI/CD Pipeline Failed"
+      #     message: "Пайплайн для коммита `${{ github.sha }}` провалился. Подробности: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      #     type: "ci-failure"
