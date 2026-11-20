@@ -99,29 +99,29 @@ jobs:
       #     }
 
       # --- 4. Деплой в Kubernetes (GitOps) ---
-      - name: Update Kubernetes manifest (GitOps)
-        shell: powershell # <-- ИЗМЕНЕНО: используем стандартный Windows PowerShell
-        env:
-          GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
-          IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
-        run: |
-          # Отключаем интерактивные запросы git
-          $env:GIT_TERMINAL_PROMPT = 0
+      # - name: Update Kubernetes manifest (GitOps)
+      #   shell: powershell # <-- ИЗМЕНЕНО: используем стандартный Windows PowerShell
+      #   env:
+      #     GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+      #     IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
+      #   run: |
+      #     # Отключаем интерактивные запросы git
+      #     $env:GIT_TERMINAL_PROMPT = 0
           
-          # ЗАМЕНИТЕ 'your-username' на реальный логин владельца репозитория с манифестами
-          git clone https://x-access-token:$env:GITOPS_TOKEN@github.com/your-username/my-app-manifests.git
-          Set-Location my-app-manifests
+      #     # ЗАМЕНИТЕ 'your-username' на реальный логин владельца репозитория с манифестами
+      #     git clone https://x-access-token:$env:GITOPS_TOKEN@github.com/your-username/my-app-manifests.git
+      #     Set-Location my-app-manifests
           
-          # Читаем файл, делаем замену по регулярному выражению и сохраняем
-          $content = Get-Content -Path deployment.yaml -Raw
-          $content = $content -replace 'image:\s*.*', "image: $env:IMAGE"
-          Set-Content -Path deployment.yaml -Value $content
+      #     # Читаем файл, делаем замену по регулярному выражению и сохраняем
+      #     $content = Get-Content -Path deployment.yaml -Raw
+      #     $content = $content -replace 'image:\s*.*', "image: $env:IMAGE"
+      #     Set-Content -Path deployment.yaml -Value $content
           
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add deployment.yaml
-          git commit -m "chore: update image to $env:IMAGE"
-          git push
+      #     git config user.name "GitHub Actions"
+      #     git config user.email "actions@github.com"
+      #     git add deployment.yaml
+      #     git commit -m "chore: update image to $env:IMAGE"
+      #     git push
 
       # --- 5. Уведомление в Пачку (заменяет Mattermost) ---
       # - name: Notify Pachka on failure
