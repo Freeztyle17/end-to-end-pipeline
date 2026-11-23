@@ -162,3 +162,4 @@ vite.config.ts.timestamp-*
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+.local-artifacts/
