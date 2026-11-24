@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+  namespace: e2e-pipeline
+  labels:
+    app: e2e-pipeline
+spec:
+  type: ClusterIP
+  selector:
+    app: e2e-pipeline
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
